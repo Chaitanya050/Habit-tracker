@@ -1,0 +1,47 @@
+
+  body {
+    background: #faf9f6;
+    font-family: 'Inter', sans-serif;
+    background-image: linear-gradient(to bottom, rgba(0,0,0,0.02) 1px, transparent 1px);
+    background-size: 100% 24px;
+  }
+  html, body {
+  height: 100%;
+  overflow-x: hidden;
+}
+.container {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+.habit-card {
+  width: 100%;
+}
+
+
+  .habit-grid {
+    display: grid;
+    grid-template-columns: 200px repeat(31, 1fr);
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .habit-grid div {
+    border-bottom: 1px solid #e5e7eb;
+    border-right: 1px solid #e5e7eb;
+    text-align: center;
+    padding: 6px;
+    font-size: 14px;
+  }
+
+  .checked {
+    background-color: #86efac; /* Tailwind green-300 */
+    transition: 0.3s;
+  }
+
+  .unchecked:hover {
+    background-color: #fef08a; /* Tailwind yellow-200 */
+    transition: 0.3s;
+  }

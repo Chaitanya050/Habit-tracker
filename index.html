@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trackify – Habit Tracker</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="apple-mobile-web-app-title" content="Trackify" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    html,body{height:100%;background:#0f172a;color:#f8fafc;margin:0;}
+    body{display:flex;flex-direction:column;}
+    .container{flex:1;width:100%;max-width:600px;margin:0 auto;padding:1rem;overflow-y:auto;}
+    .habit-card{background:#1e293b;border-radius:1rem;padding:1rem;margin-bottom:1rem;box-shadow:0 2px 6px rgba(0,0,0,0.3);}
+    .grid-cell{width:2rem;height:2rem;border-radius:.5rem;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.2s;}
+    .grid-cell.done{background:#22c55e;}
+    .grid-cell:hover{background:#475569;}
+    #chart{background:#1e293b;border-radius:1rem;padding:.5rem;}
+    button{cursor:pointer;}
+  </style>
+</head>
+<body>
+  <header class="text-center py-4">
+    <h1 class="text-3xl font-bold">📓 Trackify</h1>
+    <p class="text-slate-400 text-sm">Minimal Offline Habit Tracker</p>
+  </header>
+
+  <div class="container">
+    <div class="flex justify-between items-center mb-4">
+      <button id="prevBtn" class="px-3 py-1 bg-slate-700 rounded">◀</button>
+      <h2 id="monthLabel" class="text-lg font-semibold"></h2>
+      <button id="nextBtn" class="px-3 py-1 bg-slate-700 rounded">▶</button>
+    </div>
+
+    <div id="habits"></div>
+
+    <div class="mt-6">
+      <h3 class="font-semibold mb-2">Add Habit</h3>
+      <input id="habitName" placeholder="Habit name" class="text-black rounded px-2 py-1 w-2/3" />
+      <input id="habitTime" type="time" class="text-black rounded px-2 py-1 w-1/3" />
+      <button id="addHabit" class="bg-lime-500 text-black rounded px-3 py-1 mt-2 w-full">Add</button>
+    </div>
+
+    <div class="mt-6">
+      <canvas id="chart" height="200"></canvas>
+    </div>
+
+    <div class="mt-6 space-y-2">
+      <button id="exportBtn" class="bg-blue-500 w-full rounded py-2">Export Data</button>
+      <button id="importBtn" class="bg-amber-500 w-full rounded py-2">Import Data</button>
+      <input id="fileIn" type="file" accept=".json" hidden />
+      <button id="clearMonth" class="bg-rose-500 w-full rounded py-2">Clear Month</button>
+      <button id="resetAll" class="bg-red-700 w-full rounded py-2">Reset All</button>
+    </div>
+
+    <div class="mt-6 text-center">
+      <button id="installBtn" style="display:none" class="bg-teal-500 text-black rounded px-4 py-2">Install App</button>
+    </div>
+
+    <div class="mt-6 text-center text-sm text-slate-500">
+      <input type="checkbox" id="enableReminders" /> Enable Notifications
+      <input id="checkInterval" type="number" min="15" value="30" class="text-black w-16 rounded px-1" /> sec check
+    </div>
+  </div>
+
+  <script>
+  const STORAGE_KEY = 'trackifyDataV1';
+  const DEFAULT_HABITS = [
+    { id: Date.now()+1, title:'🕕 Up by 5:45 AM', time:'05:45' },
+    { id: Date.now()+2, title:'🏃 Morning Run', time:'06:00' },
+    { id: Date.now()+3, title:'💧 Drink 2L Water', time:'08:00' },
+    { id: Date.now()+4, title:'📚 College Notes Review', time:'18:00' },
+    { id: Date.now()+5, title:'🧠 Work on DSA', time:'19:00' },
+    { id: Date.now()+6, title:'🧘 Gym', time:'20:00' },
+    { id: Date.now()+7, title:'💼 Startup Work', time:'21:00' },
+    { id: Date.now()+8, title:'💻 Study College Subject', time:'22:00' },
+    { id: Date.now()+9, title:'📅 Plan Next Day', time:'23:00' },
+    { id: Date.now()+10, title:'😴 Sleep before 12:00', time:'23:59' },
+  ];
+  let store = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"habits":[],"records":{}}');
+  let viewMonth = new Date().getMonth(), viewYear = new Date().getFullYear();
+  let lineChart, notifTimer = null, lastNotified = {};
+
+  const habitsEl = document.getElementById('habits');
+  const monthLabel = document.getElementById('monthLabel');
+
+  function saveStore(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); }
+  function daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
+  function cellId(h,y,m,d){ return `${h}-${y}-${m}-${d}`; }
+
+  function renderAll(){
+    renderMonth();
+    renderHabits();
+    updateLineChart();
+  }
+
+  function renderMonth(){
+    const monthName = new Date(viewYear, viewMonth).toLocaleString('default',{month:'long',year:'numeric'});
+    monthLabel.textContent = monthName;
+  }
+
+  function renderHabits(){
+    habitsEl.innerHTML = '';
+    const totalDays = daysInMonth(viewYear, viewMonth);
+    for(const habit of store.habits){
+      const card = document.createElement('div');
+      card.className = 'habit-card';
+      card.innerHTML = `
+        <div class="flex justify-between items-center">
+          <h3 class="font-semibold">${habit.title}</h3>
+          <input type="time" value="${habit.time||''}" class="text-black rounded px-1 w-24 habit-time">
+        </div>
+        <div class="flex flex-wrap gap-1 mt-2 days"></div>
+        <button class="mark-btn bg-lime-500 text-black rounded px-3 py-1 mt-2 w-full">Mark Done Today</button>
+      `;
+      const daysDiv = card.querySelector('.days');
+      for(let d=1; d<=totalDays; d++){
+        const c = document.createElement('div');
+        c.className = 'grid-cell';
+        const id = cellId(habit.id, viewYear, viewMonth, d);
+        if(store.records[id]) c.classList.add('done');
+        c.textContent = d;
+        c.addEventListener('click', ()=>{
+          if(store.records[id]) delete store.records[id];
+          else store.records[id] = true;
+          saveStore(); renderAll();
+        });
+        daysDiv.appendChild(c);
+      }
+
+      card.querySelector('.mark-btn').addEventListener('click', ()=>{
+        const today = new Date();
+        if(today.getMonth()!==viewMonth || today.getFullYear()!==viewYear) return alert('Switch to current month!');
+        const id = cellId(habit.id, viewYear, viewMonth, today.getDate());
+        store.records[id] = true;
+        saveStore(); renderAll();
+      });
+
+      card.querySelector('.habit-time').addEventListener('change', e=>{
+        habit.time = e.target.value; saveStore();
+      });
+
+      habitsEl.appendChild(card);
+    }
+  }
+
+  document.getElementById('addHabit').addEventListener('click', ()=>{
+    const name = document.getElementById('habitName').value.trim();
+    const time = document.getElementById('habitTime').value;
+    if(!name) return alert('Enter habit name');
+    store.habits.push({ id: Date.now(), title:name, time });
+    saveStore(); renderAll();
+    document.getElementById('habitName').value = ''; document.getElementById('habitTime').value='';
+  });
+
+  /* ---------- Line chart ---------- */
+  const ctx = document.getElementById('chart').getContext('2d');
+  lineChart = new Chart(ctx, {
+    type:'line',
+    data:{ labels:[], datasets:[{label:'Completion %',data:[],borderColor:'#22c55e',fill:false,tension:.3}]},
+    options:{scales:{y:{min:0,max:100,ticks:{color:'#fff'}},x:{ticks:{color:'#fff'}}},plugins:{legend:{labels:{color:'#fff'}}},responsive:true,maintainAspectRatio:false}
+  });
+
+  function updateLineChart(){
+    const today = new Date();
+    const labels = [], data = [];
+    for(let i=6;i>=0;i--){
+      const d = new Date(); d.setDate(today.getDate()-i);
+      labels.push(d.toLocaleDateString(undefined,{month:'short', day:'numeric'}));
+      const y=d.getFullYear(),m=d.getMonth(),day=d.getDate();
+      let done=0,total=Math.max(store.habits.length,1);
+      for(const h of store.habits){
+        if(store.records[cellId(h.id,y,m,day)]) done++;
+      }
+      data.push(Math.round((done/total)*100));
+    }
+    lineChart.data.labels=labels; lineChart.data.datasets[0].data=data; lineChart.update();
+  }
+
+  /* ---------- Notifications ---------- */
+  async function requestNotificationPermission(){
+    if(!('Notification' in window)) return false;
+    const perm = await Notification.requestPermission();
+    return perm==='granted';
+  }
+  function notifyNow(title,body,tag){
+    if(!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.ready.then(reg=>{
+      reg.showNotification(title,{body,icon:'icons/icon-192.png',tag,renotify:true,vibrate:[200,100,200]});
+    });
+  }
+  function checkReminders(){
+    if(Notification.permission!=='granted') return;
+    const now=new Date(); const hhmm=now.toTimeString().slice(0,5);
+    const todayKey=now.toISOString().slice(0,10);
+    for(const h of store.habits){
+      if(!h.time) continue;
+      if(h.time===hhmm){
+        const tag=`${h.id}|${todayKey}|${hhmm}`;
+        if(lastNotified[tag]) continue;
+        lastNotified[tag]=true;
+        notifyNow('Trackify Reminder',`Time for: ${h.title}`,tag);
+      }
+    }
+  }
+  function startReminderLoop(){
+    stopReminderLoop();
+    if(!document.getElementById('enableReminders').checked) return;
+    const sec=Number(document.getElementById('checkInterval').value||30);
+    checkReminders(); notifTimer=setInterval(checkReminders,sec*1000);
+  }
+  function stopReminderLoop(){ if(notifTimer){clearInterval(notifTimer); notifTimer=null;} }
+
+  /* ---------- Buttons ---------- */
+  document.getElementById('exportBtn').addEventListener('click',()=>{
+    const blob=new Blob([JSON.stringify(store,null,2)],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`trackify-export-${(new Date()).toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(a.href);
+  });
+
+  document.getElementById('importBtn').addEventListener('click',()=>document.getElementById('fileIn').click());
+  document.getElementById('fileIn').addEventListener('change',e=>{
+    const f=e.target.files[0]; if(!f)return;
+    const r=new FileReader();
+    r.onload=()=>{
+      try{
+        const obj=JSON.parse(r.result);
+        if(obj.habits&&obj.records){
+          if(confirm('Replace local data?')){store=obj;saveStore();renderAll();}
+        }else alert('Invalid file');
+      }catch{alert('Invalid JSON');}
+    }; r.readAsText(f);
+  });
+
+  document.getElementById('clearMonth').addEventListener('click',()=>{
+    if(!confirm('Clear this month?'))return;
+    const total=daysInMonth(viewYear,viewMonth);
+    for(const h of store.habits){
+      for(let d=1;d<=total;d++){
+        const id=cellId(h.id,viewYear,viewMonth,d);
+        if(store.records[id]) delete store.records[id];
+      }
+    } saveStore(); renderAll();
+  });
+
+  document.getElementById('resetAll').addEventListener('click',()=>{
+    if(!confirm('Reset all?'))return;
+    localStorage.removeItem(STORAGE_KEY); store={habits:DEFAULT_HABITS,records:{}}; saveStore(); renderAll();
+  });
+
+  document.getElementById('prevBtn').addEventListener('click',()=>{viewMonth--;if(viewMonth<0){viewMonth=11;viewYear--;}renderAll();});
+  document.getElementById('nextBtn').addEventListener('click',()=>{viewMonth++;if(viewMonth>11){viewMonth=0;viewYear++;}renderAll();});
+
+  /* ---------- PWA ---------- */
+  let deferredPrompt=null;
+  const installBtn=document.getElementById('installBtn');
+  window.addEventListener('beforeinstallprompt',e=>{
+    e.preventDefault(); deferredPrompt=e; installBtn.style.display='inline-block';
+  });
+  installBtn.addEventListener('click',async()=>{
+    if(!deferredPrompt)return;
+    deferredPrompt.prompt(); const choice=await deferredPrompt.userChoice;
+    if(choice.outcome==='accepted')installBtn.style.display='none'; deferredPrompt=null;
+  });
+  window.addEventListener('appinstalled',()=>installBtn.style.display='none');
+  if('serviceWorker'in navigator){navigator.serviceWorker.register('./sw.js');}
+
+  /* ---------- init ---------- */
+  if(store.habits.length===0){store.habits=DEFAULT_HABITS.slice(); saveStore();}
+  renderAll();
+  if(document.getElementById('enableReminders').checked) startReminderLoop();
+  document.getElementById('enableReminders').addEventListener('change',async()=>{
+    if(document.getElementById('enableReminders').checked){
+      const ok=await requestNotificationPermission();
+      if(!ok){alert('Notifications blocked');document.getElementById('enableReminders').checked=false;return;}
+      startReminderLoop();
+    } else stopReminderLoop();
+  });
+  document.getElementById('checkInterval').addEventListener('change',()=>{if(document.getElementById('enableReminders').checked)startReminderLoop();});
+  </script>
+</body>
+</html>
