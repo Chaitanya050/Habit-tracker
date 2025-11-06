@@ -1,2 +1,30 @@
-# Habit-tracker
-A minimal Progressive Web App (PWA) habit tracker inspired by bullet journals. Track daily habits, view streaks, and stay consistent — works offline and installable on any device. Built with HTML, Tailwind CSS, and JavaScript, featuring a clean monthly grid layout and PWA support.
+# 🌱 Habit Tracker PWA
+
+A modern **Progressive Web App** built by [Chaitanya](https://github.com/yourusername)  
+to help track daily habits, visualize consistency, and stay focused — all offline.
+
+---
+
+## ✨ Features
+- 📊 Interactive daily grid tracker  
+- 📱 Add to Home Screen (PWA installable)  
+- 💤 Offline support with service worker  
+- 💾 Local caching for instant load  
+- 🎨 Premium dark gradient theme  
+- 🧠 Responsive on all devices  
+
+---
+
+## 🧩 Tech Stack
+- **Bootstrap 5.3**
+- **Chart.js**
+- **Service Worker API**
+- **Manifest.json (PWA)**
+- **Tailwind CSS (optional)**
+
+---
+
+## 🚀 Run Locally
+```bash
+git clone https://github.com/yourusername/habit-tracker.git
+cd habit-tracker
